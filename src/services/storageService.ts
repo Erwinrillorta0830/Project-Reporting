@@ -210,7 +210,8 @@ export const fetchDailyLogsFromSupabase = async (): Promise<DailyLog[]> => {
           evidenceUrl: t.evidence_url || '',
           qaAcknowledged: t.qa_acknowledged,
           qaManagerName: t.qa_manager_name || 'Regine Lachica',
-          unfinishedReason: t.unfinished_reason || ''
+          unfinishedReason: t.unfinished_reason || '',
+          taskDate: t.task_date || l.log_date
         }))
       }));
     }
@@ -225,29 +226,35 @@ export const fetchDailyLogsFromSupabase = async (): Promise<DailyLog[]> => {
  */
 export const saveDailyLogToSupabase = async (log: DailyLog): Promise<DailyLog[]> => {
   try {
+    const isUUID = (str?: string) => Boolean(str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str));
+
+    const logPayload: any = {
+      project_id: isUUID(log.projectId) ? log.projectId : '11111111-1111-1111-1111-111111111111',
+      developer_name: log.developerName,
+      log_date: log.date,
+      plans_for_tomorrow: log.plansForTomorrow,
+      blockers: log.blockers,
+      server_updates: log.serverUpdates,
+      backend_dev_name: log.backendDevName,
+      backend_dev_acknowledged: log.backendDevAcknowledged,
+      ai_enhanced: log.aiEnhanced
+    };
+
+    if (isUUID(log.id)) {
+      logPayload.id = log.id;
+    }
+
     const { data: insertedLog, error: logError } = await supabase
       .from('daily_logs')
-      .upsert({
-        id: log.id.includes('-') && log.id.length > 30 ? log.id : undefined,
-        project_id: log.projectId.includes('-') && log.projectId.length > 30 ? log.projectId : '11111111-1111-1111-1111-111111111111',
-        developer_name: log.developerName,
-        log_date: log.date,
-        plans_for_tomorrow: log.plansForTomorrow,
-        blockers: log.blockers,
-        server_updates: log.serverUpdates,
-        backend_dev_name: log.backendDevName,
-        backend_dev_acknowledged: log.backendDevAcknowledged,
-        ai_enhanced: log.aiEnhanced
-      })
+      .upsert(logPayload)
       .select()
       .single();
 
     if (!logError && insertedLog && log.tasks) {
       for (const t of log.tasks) {
-        await supabase.from('tasks').upsert({
-          id: t.id.includes('-') && t.id.length > 30 ? t.id : undefined,
+        const taskPayload: any = {
           daily_log_id: insertedLog.id,
-          project_id: (t.projectId && t.projectId.includes('-')) ? t.projectId : insertedLog.project_id,
+          project_id: isUUID(t.projectId) ? t.projectId : insertedLog.project_id,
           title: t.title,
           description: t.description,
           status: t.status,
@@ -256,8 +263,15 @@ export const saveDailyLogToSupabase = async (log: DailyLog): Promise<DailyLog[]>
           evidence_url: t.evidenceUrl,
           qa_acknowledged: t.qaAcknowledged,
           qa_manager_name: t.qaManagerName,
-          unfinished_reason: t.unfinishedReason
-        });
+          unfinished_reason: t.unfinishedReason,
+          task_date: t.taskDate || insertedLog.log_date
+        };
+
+        if (isUUID(t.id)) {
+          taskPayload.id = t.id;
+        }
+
+        await supabase.from('tasks').upsert(taskPayload);
       }
     }
   } catch (err) {

@@ -18,7 +18,9 @@ import {
   Upload,
   Paperclip,
   Image as ImageIcon,
-  X
+  X,
+  Pencil,
+  Eye
 } from 'lucide-react';
 
 interface DeveloperViewProps {
@@ -64,6 +66,9 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
     }
   }, [selectedProjectId, developers]);
 
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [viewingModalLog, setViewingModalLog] = useState<DailyLog | null>(null);
+
   const [tasks, setTasks] = useState<TaskItem[]>([
     {
       id: `task-${Date.now()}-1`,
@@ -85,6 +90,56 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
   
   const [isImproving, setIsImproving] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  const handleEditLog = (log: DailyLog) => {
+    setEditingLogId(log.id);
+    setDeveloperName(log.developerName);
+    setLogDate(log.date);
+    setTasks(
+      log.tasks && log.tasks.length > 0
+        ? log.tasks.map(t => ({ ...t }))
+        : [
+            {
+              id: `task-${Date.now()}-1`,
+              projectId: log.projectId || currentProject.id,
+              title: '',
+              description: '',
+              status: 'done',
+              isForQA: false,
+              isOutofScope: false,
+              evidenceUrl: '',
+              qaAcknowledged: false,
+              unfinishedReason: ''
+            }
+          ]
+    );
+    setPlansForTomorrow(log.plansForTomorrow || '');
+    setBlockers(log.blockers || '');
+    setServerUpdates(log.serverUpdates || '');
+    setViewingModalLog(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLogId(null);
+    setTasks([
+      {
+        id: `task-${Date.now()}-1`,
+        projectId: currentProject.id,
+        title: '',
+        description: '',
+        status: 'done',
+        isForQA: false,
+        isOutofScope: false,
+        evidenceUrl: '',
+        qaAcknowledged: false,
+        unfinishedReason: ''
+      }
+    ]);
+    setPlansForTomorrow('');
+    setBlockers('');
+    setServerUpdates('');
+  };
 
   const handleAddTask = () => {
     setTasks([
@@ -177,8 +232,10 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
       return;
     }
 
+    const existingLog = editingLogId ? dailyLogs.find(l => l.id === editingLogId) : null;
+
     const newLog: DailyLog = {
-      id: `log-${Date.now()}`,
+      id: editingLogId || `log-${Date.now()}`,
       projectId: currentProject.id,
       developerName: developerName.trim(),
       date: logDate,
@@ -188,7 +245,8 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
         return {
           ...t,
           projectId: taskProjId,
-          qaManagerName: taskProj.qaManagerName || currentProject.qaManagerName
+          qaManagerName: taskProj.qaManagerName || currentProject.qaManagerName,
+          taskDate: t.taskDate || logDate
         };
       }),
       plansForTomorrow: plansForTomorrow.trim(),
@@ -196,11 +254,12 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
       serverUpdates: serverUpdates.trim(),
       backendDevName: currentProject.backendLeadName,
       backendDevAcknowledged: serverUpdates.trim().length > 0,
-      createdAt: new Date().toISOString()
+      createdAt: existingLog?.createdAt || new Date().toISOString()
     };
 
     onSaveLog(newLog);
     setSubmitSuccess(true);
+    setEditingLogId(null);
     setTimeout(() => setSubmitSuccess(false), 3000);
 
     setTasks([
@@ -268,6 +327,25 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
           
           <form onSubmit={handleSubmit} className="space-y-6">
             
+            {/* Editing Mode Alert Banner */}
+            {editingLogId && (
+              <div className="bg-amber-950/70 border border-amber-500/50 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+                <div className="flex items-center space-x-2 text-amber-200 font-semibold">
+                  <Pencil className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    Editing Submitted Log ({logDate} • {developerName})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition text-[11px] font-bold shrink-0 self-start sm:self-auto"
+                >
+                  Cancel / New Log
+                </button>
+              </div>
+            )}
+
             {/* Dev Metadata Row with Developer Dropdown Selector */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
@@ -602,12 +680,12 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
                 {submitSuccess ? (
                   <>
                     <Check className="w-4 h-4 text-emerald-300" />
-                    <span>Log Submitted!</span>
+                    <span>{editingLogId ? 'Log Updated!' : 'Log Submitted!'}</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    <span>Submit Daily Log</span>
+                    <span>{editingLogId ? 'Update Daily Log' : 'Submit Daily Log'}</span>
                   </>
                 )}
               </button>
@@ -648,7 +726,9 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
                 {projectLogs.map((log) => (
                   <div 
                     key={log.id} 
-                    className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 transition space-y-2 text-xs"
+                    className={`p-3.5 rounded-xl bg-slate-950/80 border transition space-y-2 text-xs ${
+                      editingLogId === log.id ? 'border-indigo-500 ring-1 ring-indigo-500/50' : 'border-slate-800 hover:border-slate-700'
+                    }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-indigo-300">{log.developerName}</span>
@@ -679,6 +759,25 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
                         <span className="truncate">{log.serverUpdates}</span>
                       </div>
                     )}
+
+                    <div className="flex items-center space-x-2 pt-2 border-t border-slate-900/80 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setViewingModalLog(log)}
+                        className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 text-[11px] font-semibold border border-slate-800 transition"
+                      >
+                        <Eye className="w-3 h-3 text-cyan-400" />
+                        <span>View</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleEditLog(log)}
+                        className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 text-[11px] font-semibold border border-indigo-500/40 transition"
+                      >
+                        <Pencil className="w-3 h-3 text-indigo-400" />
+                        <span>Edit Log</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -688,6 +787,120 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
         </div>
 
       </div>
+
+      {/* View Log Details Modal */}
+      {viewingModalLog && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 font-mono">Submitted Daily Log</span>
+                <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                  <span>{viewingModalLog.developerName}</span>
+                  <span className="text-xs text-slate-400 font-normal">({viewingModalLog.date})</span>
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingModalLog(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="space-y-4 text-xs text-slate-200">
+              
+              {/* Tasks List */}
+              <div className="space-y-2">
+                <div className="font-bold text-slate-300 uppercase tracking-wider text-[11px]">Tasks & Accomplishments</div>
+                <div className="space-y-2.5">
+                  {viewingModalLog.tasks.map((t, idx) => (
+                    <div key={idx} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-white">{t.title}</span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                          t.status === 'done' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                          t.status === 'for_qa' ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' :
+                          t.status === 'blocked' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                          'bg-amber-950 text-amber-400 border border-amber-800'
+                        }`}>
+                          {t.status}
+                        </span>
+                      </div>
+                      {t.description && (
+                        <p className="text-slate-300 whitespace-pre-line">{t.description}</p>
+                      )}
+                      {t.unfinishedReason && (
+                        <p className="text-amber-400 text-[11px]">• Valid Reason: {t.unfinishedReason}</p>
+                      )}
+                      {t.evidenceUrl && (
+                        <div className="pt-1 text-[11px]">
+                          {t.evidenceUrl.startsWith('data:image') || t.evidenceUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) ? (
+                            <img src={t.evidenceUrl} alt="Proof" className="max-h-28 rounded-lg border border-slate-800 mt-1" />
+                          ) : (
+                            <div className="font-mono text-cyan-400 truncate">
+                              Proof Link: <a href={t.evidenceUrl} target="_blank" rel="noreferrer" className="underline">{t.evidenceUrl}</a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Plans for Tomorrow */}
+              {viewingModalLog.plansForTomorrow && (
+                <div className="space-y-1 p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="font-bold text-indigo-400 uppercase tracking-wider text-[10px]">Plans for Tomorrow</div>
+                  <p className="whitespace-pre-line text-slate-200">{viewingModalLog.plansForTomorrow}</p>
+                </div>
+              )}
+
+              {/* Blockers */}
+              {viewingModalLog.blockers && (
+                <div className="space-y-1 p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="font-bold text-rose-400 uppercase tracking-wider text-[10px]">Blockers</div>
+                  <p className="whitespace-pre-line text-slate-200">{viewingModalLog.blockers}</p>
+                </div>
+              )}
+
+              {/* Server Updates */}
+              {viewingModalLog.serverUpdates && (
+                <div className="space-y-1 p-3 rounded-xl bg-slate-950 border border-slate-800 font-mono">
+                  <div className="font-bold text-emerald-400 uppercase tracking-wider text-[10px]">Server Updates</div>
+                  <p className="whitespace-pre-line text-emerald-300">{viewingModalLog.serverUpdates}</p>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewingModalLog(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => handleEditLog(viewingModalLog)}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center space-x-1.5"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Edit This Log</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

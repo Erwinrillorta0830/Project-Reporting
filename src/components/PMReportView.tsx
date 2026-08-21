@@ -186,6 +186,24 @@ export const PMReportView: React.FC<PMReportViewProps> = ({
     md += `**Reporting Period:** ${reportPeriodLabel}\n`;
     md += `**Developers:** ${developersStr}\n\n`;
 
+    const formatDateShort = (dateStr?: string) => {
+      if (!dateStr) return '';
+      try {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const d = new Date(year, month - 1, day);
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      } catch {
+        // fallback
+      }
+      return dateStr;
+    };
+
     const allTasks = filteredLogs.flatMap(l => 
       l.tasks.map(t => {
         const taskProjId = t.projectId || l.projectId;
@@ -194,43 +212,87 @@ export const PMReportView: React.FC<PMReportViewProps> = ({
         return {
           task: t,
           developer: l.developerName,
-          projectCode: code
+          projectCode: code,
+          date: t.taskDate || l.date
         };
       })
     );
 
+    const doneTasks = allTasks.filter(item => item.task.status === 'done' && !item.task.isOutofScope);
+    const qaReviewTasks = allTasks.filter(item => item.task.isForQA || item.task.status === 'for_qa');
+    const unfinishedTasks = allTasks.filter(item => item.task.status === 'in_progress' || item.task.status === 'blocked');
+    const outOfScopeTasks = allTasks.filter(item => item.task.isOutofScope);
+
+    // Group Done Tasks by Date + Developer + Project
+    const groupedDone = doneTasks.reduce<{ date: string; developer: string; projectCode: string; items: typeof doneTasks }[]>((groups, item) => {
+      const existing = groups.find(g => g.date === item.date && g.developer === item.developer && g.projectCode === item.projectCode);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        groups.push({ date: item.date, developer: item.developer, projectCode: item.projectCode, items: [item] });
+      }
+      return groups;
+    }, []);
+    groupedDone.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
     md += `### Done Task for the Whole Week with Approval of QA Manager\n`;
-    allTasks.filter(item => item.task.status === 'done' && !item.task.isOutofScope).forEach(item => {
-      md += `o **${item.developer} (${item.projectCode}):** ${item.task.description || item.task.title}\n`;
-      md += `  o QA Approval: [ ]\n`;
+    groupedDone.forEach(group => {
+      const dStr = group.date ? ` - ${formatDateShort(group.date)}` : '';
+      md += `o **${group.developer} (${group.projectCode}${dStr}):**\n`;
+      group.items.forEach(item => {
+        md += `  o ${item.task.description || item.task.title}\n`;
+        md += `    o QA Approval: [ ]\n`;
+        if (item.task.evidenceUrl) {
+          md += `    o Evidence Proof Link: ${item.task.evidenceUrl}\n`;
+        }
+      });
     });
 
     md += `\n### List of Tasks for QA Review\n`;
-    allTasks.filter(item => item.task.isForQA || item.task.status === 'for_qa').forEach(item => {
-      md += `o **${item.projectCode}:** ${item.task.title} (${item.task.description})\n`;
+    const groupedQA = qaReviewTasks.reduce<{ date: string; projectCode: string; items: typeof qaReviewTasks }[]>((groups, item) => {
+      const existing = groups.find(g => g.date === item.date && g.projectCode === item.projectCode);
+      if (existing) existing.items.push(item);
+      else groups.push({ date: item.date, projectCode: item.projectCode, items: [item] });
+      return groups;
+    }, []);
+    groupedQA.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+    groupedQA.forEach(group => {
+      const dStr = group.date ? ` (${formatDateShort(group.date)})` : '';
+      md += `o **${group.projectCode}${dStr}:**\n`;
+      group.items.forEach(item => {
+        md += `  o ${item.task.title} (${item.task.description})\n`;
+        if (item.task.evidenceUrl) {
+          md += `    o Evidence Proof Link: ${item.task.evidenceUrl}\n`;
+        }
+      });
     });
     md += `\n${templateConfig.qaSignatureLabel}: ____________________\nDate Approved: ____________________\n`;
 
     md += `\n### List of Unfinished Tasks with Valid Reasons\n`;
-    allTasks.filter(item => item.task.status === 'in_progress' || item.task.status === 'blocked').forEach(item => {
-      md += `o **Task:** ${item.task.title}\n`;
+    unfinishedTasks.forEach(item => {
+      const dStr = item.date ? ` (${formatDateShort(item.date)})` : '';
+      md += `o **Task${dStr}:** ${item.task.title}\n`;
       md += `  o **Valid Reason:** ${item.task.unfinishedReason || 'Pending workflow stabilization.'}\n`;
     });
 
     md += `\n### List of Tasks Done Out of Scope from the Planned Tasks for the Week\n`;
-    allTasks.filter(item => item.task.isOutofScope).forEach(item => {
-      md += `o **${item.task.title}:** ${item.task.description}\n`;
+    outOfScopeTasks.forEach(item => {
+      const dStr = item.date ? ` (${formatDateShort(item.date)})` : '';
+      md += `o **${item.task.title}${dStr}:** ${item.task.description}\n`;
     });
 
     md += `\n### System Update to the Server\n`;
     filteredLogs.filter(l => l.serverUpdates).forEach(l => {
-      md += `o ${l.serverUpdates}\n`;
+      const dStr = l.date ? ` (${formatDateShort(l.date)})` : '';
+      md += `o ${l.serverUpdates}${dStr}\n`;
     });
     md += `\n${templateConfig.backendSignatureLabel}: ____________________\nDate Acknowledged: ____________________\n`;
 
     md += `\n### Blockers\n`;
-    filteredLogs.map(l => l.blockers).filter(b => b && b.toLowerCase() !== 'none').forEach(b => {
-      md += `o ${b}\n`;
+    filteredLogs.filter(l => l.blockers && l.blockers.toLowerCase() !== 'none').forEach(l => {
+      const dStr = l.date ? ` (${formatDateShort(l.date)})` : '';
+      md += `o ${l.blockers}${dStr}\n`;
     });
 
     navigator.clipboard.writeText(md);

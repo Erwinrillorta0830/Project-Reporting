@@ -30,8 +30,26 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
     ? developersList.join(' and ')
     : 'Christian Parayno and Marc Quitalig';
 
+  const formatDateShort = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const d = new Date(year, month - 1, day);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+    } catch {
+      // fallback
+    }
+    return dateStr;
+  };
+
   // Aggregate all tasks
-  const allTasks: { task: TaskItem; developer: string; projectCode: string }[] = logs.flatMap(l => 
+  const allTasks: { task: TaskItem; developer: string; projectCode: string; date: string }[] = logs.flatMap(l => 
     l.tasks.map(t => {
       const taskProjId = t.projectId || l.projectId;
       const foundProj = projects.find(p => p.id === taskProjId);
@@ -39,7 +57,8 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
       return {
         task: t,
         developer: l.developerName,
-        projectCode: code
+        projectCode: code,
+        date: t.taskDate || l.date
       };
     })
   );
@@ -53,12 +72,91 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
   // Extract server updates
   const serverUpdatesList = logs
     .filter(l => l.serverUpdates && l.serverUpdates.trim().length > 0)
-    .map(l => l.serverUpdates!);
+    .map(l => ({ update: l.serverUpdates!, date: l.date }));
 
   // Extract blockers
   const blockersList = logs
     .filter(l => l.blockers && l.blockers.trim().length > 0 && l.blockers !== 'None')
-    .map(l => l.blockers!);
+    .map(l => ({ blocker: l.blockers!, date: l.date }));
+
+  // Group Done Tasks by Date + Developer + Project Code
+  const groupedDoneTasks = doneTasks.reduce<{ date: string; developer: string; projectCode: string; items: typeof doneTasks }[]>((groups, item) => {
+    const existingGroup = groups.find(
+      g => g.date === item.date && g.developer === item.developer && g.projectCode === item.projectCode
+    );
+    if (existingGroup) {
+      existingGroup.items.push(item);
+    } else {
+      groups.push({
+        date: item.date,
+        developer: item.developer,
+        projectCode: item.projectCode,
+        items: [item]
+      });
+    }
+    return groups;
+  }, []);
+  groupedDoneTasks.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  // Group QA Review Tasks by Date + Project Code
+  const groupedQAReviewTasks = qaReviewTasks.reduce<{ date: string; projectCode: string; items: typeof qaReviewTasks }[]>((groups, item) => {
+    const existingGroup = groups.find(g => g.date === item.date && g.projectCode === item.projectCode);
+    if (existingGroup) {
+      existingGroup.items.push(item);
+    } else {
+      groups.push({ date: item.date, projectCode: item.projectCode, items: [item] });
+    }
+    return groups;
+  }, []);
+  groupedQAReviewTasks.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  // Group Unfinished Tasks by Date
+  const groupedUnfinishedTasks = unfinishedTasks.reduce<{ date: string; items: typeof unfinishedTasks }[]>((groups, item) => {
+    const existingGroup = groups.find(g => g.date === item.date);
+    if (existingGroup) {
+      existingGroup.items.push(item);
+    } else {
+      groups.push({ date: item.date, items: [item] });
+    }
+    return groups;
+  }, []);
+  groupedUnfinishedTasks.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  // Group Out of Scope Tasks by Date
+  const groupedOutOfScopeTasks = outOfScopeTasks.reduce<{ date: string; items: typeof outOfScopeTasks }[]>((groups, item) => {
+    const existingGroup = groups.find(g => g.date === item.date);
+    if (existingGroup) {
+      existingGroup.items.push(item);
+    } else {
+      groups.push({ date: item.date, items: [item] });
+    }
+    return groups;
+  }, []);
+  groupedOutOfScopeTasks.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  // Group Server Updates by Date
+  const groupedServerUpdates = serverUpdatesList.reduce<{ date: string; updates: string[] }[]>((groups, item) => {
+    const existingGroup = groups.find(g => g.date === item.date);
+    if (existingGroup) {
+      existingGroup.updates.push(item.update);
+    } else {
+      groups.push({ date: item.date, updates: [item.update] });
+    }
+    return groups;
+  }, []);
+  groupedServerUpdates.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  // Group Blockers by Date
+  const groupedBlockers = blockersList.reduce<{ date: string; blockers: string[] }[]>((groups, item) => {
+    const existingGroup = groups.find(g => g.date === item.date);
+    if (existingGroup) {
+      existingGroup.blockers.push(item.blocker);
+    } else {
+      groups.push({ date: item.date, blockers: [item.blocker] });
+    }
+    return groups;
+  }, []);
+  groupedBlockers.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   const fontFamilyStyle = {
     fontFamily: templateConfig.fontFamily === 'Times New Roman' 
@@ -177,49 +275,73 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       : 'Done Task for the Whole Week with Approval of QA Manager'}
                   </h3>
 
-                  {doneTasks.length === 0 ? (
+                  {groupedDoneTasks.length === 0 ? (
                     <p className="text-xs italic text-slate-500 pl-4">• No completed tasks recorded for this period.</p>
                   ) : (
-                    <ul className="space-y-2 pl-2 text-xs text-slate-900">
-                      {doneTasks.map((item, idx) => (
-                        <li key={idx} className="space-y-1">
+                    <div className="space-y-2.5 text-xs text-slate-900">
+                      {groupedDoneTasks.map((group, gIdx) => (
+                        <div key={gIdx} className="space-y-1">
                           <div className="flex items-start space-x-2">
                             <span className="text-slate-500 font-mono">o</span>
                             <div>
-                              <strong className="text-slate-900">{item.developer} ({item.projectCode}):</strong>{' '}
-                              <span>{item.task.description || item.task.title}</span>
+                              <strong className="text-slate-900">
+                                {group.developer} ({group.projectCode}{group.date ? ` - ${formatDateShort(group.date)}` : ''}):
+                              </strong>
                             </div>
                           </div>
-                          <div className="pl-5 text-slate-700 flex items-center space-x-2">
-                            <span className="text-slate-400 font-mono">o</span>
-                            <span>QA Approval: [{item.task.qaAcknowledged ? ' X ' : '   '}]</span>
-                          </div>
+                          <ul className="space-y-1.5 pl-5 text-xs text-slate-900">
+                            {group.items.map((item, idx) => (
+                              <li key={idx} className="space-y-0.5">
+                                <div className="flex items-start space-x-2">
+                                  <span className="text-slate-400 font-mono">o</span>
+                                  <div>
+                                    <span className="whitespace-pre-line">{item.task.description || item.task.title}</span>
+                                  </div>
+                                </div>
+                                <div className="pl-5 text-slate-700 flex items-center space-x-2">
+                                  <span className="text-slate-400 font-mono">o</span>
+                                  <span>QA Approval: [{item.task.qaAcknowledged ? ' X ' : '   '}]</span>
+                                </div>
 
-                          {/* Evidence Screenshot or Link */}
-                          {item.task.evidenceUrl && (
-                            <div className="pl-5 pt-0.5 text-xs text-slate-800">
-                              {item.task.evidenceUrl.startsWith('data:image') || item.task.evidenceUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) ? (
-                                <div className="my-1 space-y-0.5">
-                                  <div className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">QA Evidence Screenshot:</div>
-                                  <img
-                                    src={item.task.evidenceUrl}
-                                    alt="QA Evidence Proof"
-                                    className="max-h-36 max-w-sm object-contain rounded border border-slate-300 bg-slate-50 p-1 shadow-sm"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="text-[11px] text-slate-700 font-mono">
-                                  <strong>Evidence Proof Link:</strong>{' '}
-                                  <a href={item.task.evidenceUrl} target="_blank" rel="noreferrer" className="text-indigo-800 underline">
-                                    {item.task.evidenceUrl}
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </li>
+                                {/* Evidence Screenshot or Link */}
+                                {item.task.evidenceUrl && (
+                                  <div className="pl-5 pt-0.5 text-xs text-slate-800">
+                                    {item.task.evidenceUrl.startsWith('data:image') || item.task.evidenceUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) ? (
+                                      <div className="my-1 space-y-0.5">
+                                        <div className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">QA Evidence Screenshot:</div>
+                                        <img
+                                          src={item.task.evidenceUrl}
+                                          alt="QA Evidence Proof"
+                                          className="max-h-36 max-w-sm object-contain rounded border border-slate-300 bg-slate-50 p-1 shadow-sm"
+                                        />
+                                        {!item.task.evidenceUrl.startsWith('data:image') && (
+                                          <div className="text-[11px] text-slate-700 font-mono mt-0.5">
+                                            <strong>Evidence Proof Link:</strong>{' '}
+                                            <a href={item.task.evidenceUrl.startsWith('http') ? item.task.evidenceUrl : `https://${item.task.evidenceUrl}`} target="_blank" rel="noreferrer" className="text-indigo-800 underline font-semibold break-all">
+                                              {item.task.evidenceUrl}
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-slate-700 font-mono flex items-center space-x-1 mt-0.5">
+                                        <span className="text-slate-400 font-mono">o</span>
+                                        <div>
+                                          <strong>Evidence Proof Link:</strong>{' '}
+                                          <a href={item.task.evidenceUrl.startsWith('http') ? item.task.evidenceUrl : `https://${item.task.evidenceUrl}`} target="_blank" rel="noreferrer" className="text-indigo-800 underline font-semibold break-all">
+                                            {item.task.evidenceUrl}
+                                          </a>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
                 </section>
 
@@ -229,20 +351,67 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                     List of Tasks for QA Review
                   </h3>
 
-                  {qaReviewTasks.length === 0 ? (
+                  {groupedQAReviewTasks.length === 0 ? (
                     <p className="text-xs italic text-slate-500 pl-4">• No tasks currently submitted for QA review.</p>
                   ) : (
-                    <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                      {qaReviewTasks.map((item, idx) => (
-                        <li key={idx} className="flex items-start space-x-2">
-                          <span className="text-slate-500 font-mono">o</span>
-                          <div>
-                            <strong className="text-slate-900">{item.projectCode}:</strong>{' '}
-                            <span>{item.task.title} {item.task.description ? `(${item.task.description})` : ''}</span>
+                    <div className="space-y-2 text-xs text-slate-900">
+                      {groupedQAReviewTasks.map((group, gIdx) => (
+                        <div key={gIdx} className="space-y-1">
+                          <div className="flex items-start space-x-2">
+                            <span className="text-slate-500 font-mono">o</span>
+                            <div>
+                              <strong className="text-slate-900">
+                                {group.projectCode}{group.date ? ` (${formatDateShort(group.date)})` : ''}:
+                              </strong>
+                            </div>
                           </div>
-                        </li>
+                          <ul className="space-y-1.5 pl-5 text-xs text-slate-900">
+                            {group.items.map((item, idx) => (
+                              <li key={idx} className="space-y-0.5">
+                                <div className="flex items-start space-x-2">
+                                  <span className="text-slate-400 font-mono">o</span>
+                                  <div>
+                                    <span className="whitespace-pre-line">{item.task.title} {item.task.description ? `(${item.task.description})` : ''}</span>
+                                  </div>
+                                </div>
+                                {item.task.evidenceUrl && (
+                                  <div className="pl-5 pt-0.5 text-xs text-slate-800">
+                                    {item.task.evidenceUrl.startsWith('data:image') || item.task.evidenceUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) ? (
+                                      <div className="my-1 space-y-0.5">
+                                        <div className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">QA Evidence Screenshot:</div>
+                                        <img
+                                          src={item.task.evidenceUrl}
+                                          alt="QA Evidence Proof"
+                                          className="max-h-36 max-w-sm object-contain rounded border border-slate-300 bg-slate-50 p-1 shadow-sm"
+                                        />
+                                        {!item.task.evidenceUrl.startsWith('data:image') && (
+                                          <div className="text-[11px] text-slate-700 font-mono mt-0.5">
+                                            <strong>Evidence Proof Link:</strong>{' '}
+                                            <a href={item.task.evidenceUrl.startsWith('http') ? item.task.evidenceUrl : `https://${item.task.evidenceUrl}`} target="_blank" rel="noreferrer" className="text-indigo-800 underline font-semibold break-all">
+                                              {item.task.evidenceUrl}
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-slate-700 font-mono flex items-center space-x-1 mt-0.5">
+                                        <span className="text-slate-400 font-mono">o</span>
+                                        <div>
+                                          <strong>Evidence Proof Link:</strong>{' '}
+                                          <a href={item.task.evidenceUrl.startsWith('http') ? item.task.evidenceUrl : `https://${item.task.evidenceUrl}`} target="_blank" rel="noreferrer" className="text-indigo-800 underline font-semibold break-all">
+                                            {item.task.evidenceUrl}
+                                          </a>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
 
                   {/* QA Signature Lines */}
@@ -260,29 +429,41 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       <h3 className="text-sm font-bold text-slate-900">
                         List of Unfinished Tasks with Valid Reasons
                       </h3>
-                      {unfinishedTasks.length === 0 ? (
+                      {groupedUnfinishedTasks.length === 0 ? (
                         <p className="text-xs italic text-slate-500 pl-4">• None — 100% of scheduled tasks were completed.</p>
                       ) : (
-                        <ul className="space-y-1.5 pl-2 text-xs text-slate-900">
-                          {unfinishedTasks.map((item, idx) => (
-                            <li key={idx} className="space-y-0.5">
-                              <div className="flex items-start space-x-2">
-                                <span className="text-slate-500 font-mono">o</span>
-                                <div>
-                                  <strong className="text-slate-900">Task:</strong>{' '}
-                                  <span>{item.task.title} — {item.task.description}</span>
+                        <div className="space-y-2 text-xs text-slate-900">
+                          {groupedUnfinishedTasks.map((group, gIdx) => (
+                            <div key={gIdx} className="space-y-1">
+                              {group.date && (
+                                <div className="flex items-start space-x-2">
+                                  <span className="text-slate-500 font-mono">o</span>
+                                  <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
                                 </div>
-                              </div>
-                              <div className="pl-5 text-slate-700 flex items-start space-x-2">
-                                <span className="text-slate-400 font-mono">o</span>
-                                <div>
-                                  <strong className="text-slate-900">Valid Reason:</strong>{' '}
-                                  <span>{item.task.unfinishedReason || 'Pending scheduled maintenance window.'}</span>
-                                </div>
-                              </div>
-                            </li>
+                              )}
+                              <ul className="space-y-1.5 pl-5 text-xs text-slate-900">
+                                {group.items.map((item, idx) => (
+                                  <li key={idx} className="space-y-0.5">
+                                    <div className="flex items-start space-x-2">
+                                      <span className="text-slate-400 font-mono">o</span>
+                                      <div>
+                                        <strong className="text-slate-900">Task:</strong>{' '}
+                                        <span className="whitespace-pre-line">{item.task.title} — {item.task.description}</span>
+                                      </div>
+                                    </div>
+                                    <div className="pl-5 text-slate-700 flex items-start space-x-2">
+                                      <span className="text-slate-400 font-mono">o</span>
+                                      <div>
+                                        <strong className="text-slate-900">Valid Reason:</strong>{' '}
+                                        <span className="whitespace-pre-line">{item.task.unfinishedReason || 'Pending scheduled maintenance window.'}</span>
+                                      </div>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       )}
                     </section>
 
@@ -291,20 +472,32 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       <h3 className="text-sm font-bold text-slate-900">
                         List of Tasks Done Out of Scope from the Planned Tasks for the Week
                       </h3>
-                      {outOfScopeTasks.length === 0 ? (
+                      {groupedOutOfScopeTasks.length === 0 ? (
                         <p className="text-xs italic text-slate-500 pl-4">• No out-of-scope tasks executed during this period.</p>
                       ) : (
-                        <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                          {outOfScopeTasks.map((item, idx) => (
-                            <li key={idx} className="flex items-start space-x-2">
-                              <span className="text-slate-500 font-mono">o</span>
-                              <div>
-                                <strong className="text-slate-900">{item.task.title}:</strong>{' '}
-                                <span>{item.task.description}</span>
-                              </div>
-                            </li>
+                        <div className="space-y-2 text-xs text-slate-900">
+                          {groupedOutOfScopeTasks.map((group, gIdx) => (
+                            <div key={gIdx} className="space-y-1">
+                              {group.date && (
+                                <div className="flex items-start space-x-2">
+                                  <span className="text-slate-500 font-mono">o</span>
+                                  <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
+                                </div>
+                              )}
+                              <ul className="space-y-1 pl-5 text-xs text-slate-900">
+                                {group.items.map((item, idx) => (
+                                  <li key={idx} className="flex items-start space-x-2">
+                                    <span className="text-slate-400 font-mono">o</span>
+                                    <div>
+                                      <strong className="text-slate-900">{item.task.title}:</strong>{' '}
+                                      <span className="whitespace-pre-line">{item.task.description}</span>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       )}
                     </section>
 
@@ -313,17 +506,29 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       <h3 className="text-sm font-bold text-slate-900">
                         System Update to the Server
                       </h3>
-                      {serverUpdatesList.length === 0 ? (
+                      {groupedServerUpdates.length === 0 ? (
                         <p className="text-xs italic text-slate-500 pl-4">• No system server updates deployed during this period.</p>
                       ) : (
-                        <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                          {serverUpdatesList.map((update, idx) => (
-                            <li key={idx} className="flex items-start space-x-2">
-                              <span className="text-slate-500 font-mono">o</span>
-                              <span>{update}</span>
-                            </li>
+                        <div className="space-y-2 text-xs text-slate-900">
+                          {groupedServerUpdates.map((group, gIdx) => (
+                            <div key={gIdx} className="space-y-1">
+                              {group.date && (
+                                <div className="flex items-start space-x-2">
+                                  <span className="text-slate-500 font-mono">o</span>
+                                  <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
+                                </div>
+                              )}
+                              <ul className="space-y-1 pl-5 text-xs text-slate-900">
+                                {group.updates.map((update, idx) => (
+                                  <li key={idx} className="flex items-start space-x-2">
+                                    <span className="text-slate-400 font-mono">o</span>
+                                    <span className="whitespace-pre-line">{update}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       )}
                       <div className="pt-2 space-y-0.5 text-xs font-semibold text-slate-900">
                         <div>Acknowledgement of Backend Dev ({project?.backendLeadName || 'James Ed Patrick Desear'}): ____________________________________</div>
@@ -336,17 +541,29 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       <h3 className="text-sm font-bold text-slate-900">
                         Blockers
                       </h3>
-                      {blockersList.length === 0 ? (
+                      {groupedBlockers.length === 0 ? (
                         <p className="text-xs italic text-slate-500 pl-4">• None — No active blockers encountered.</p>
                       ) : (
-                        <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                          {blockersList.map((blocker, idx) => (
-                            <li key={idx} className="flex items-start space-x-2">
-                              <span className="text-slate-500 font-mono">o</span>
-                              <span>{blocker}</span>
-                            </li>
+                        <div className="space-y-2 text-xs text-slate-900">
+                          {groupedBlockers.map((group, gIdx) => (
+                            <div key={gIdx} className="space-y-1">
+                              {group.date && (
+                                <div className="flex items-start space-x-2">
+                                  <span className="text-slate-500 font-mono">o</span>
+                                  <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
+                                </div>
+                              )}
+                              <ul className="space-y-1 pl-5 text-xs text-slate-900">
+                                {group.blockers.map((blocker, idx) => (
+                                  <li key={idx} className="flex items-start space-x-2">
+                                    <span className="text-slate-400 font-mono">o</span>
+                                    <span className="whitespace-pre-line">{blocker}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       )}
                       <div className="pt-2 space-y-0.5 text-xs font-semibold text-slate-900">
                         <div>Prepared & Approved by Project Manager (Erwin Rillorta): ____________________________________</div>
@@ -466,29 +683,41 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       List of Unfinished Tasks with Valid Reasons
                     </h3>
 
-                    {unfinishedTasks.length === 0 ? (
+                    {groupedUnfinishedTasks.length === 0 ? (
                       <p className="text-xs italic text-slate-500 pl-4">• None — 100% of scheduled tasks were completed.</p>
                     ) : (
-                      <ul className="space-y-1.5 pl-2 text-xs text-slate-900">
-                        {unfinishedTasks.map((item, idx) => (
-                          <li key={idx} className="space-y-0.5">
-                            <div className="flex items-start space-x-2">
-                              <span className="text-slate-500 font-mono">o</span>
-                              <div>
-                                <strong className="text-slate-900">Task:</strong>{' '}
-                                <span>{item.task.title} — {item.task.description}</span>
+                      <div className="space-y-2 text-xs text-slate-900">
+                        {groupedUnfinishedTasks.map((group, gIdx) => (
+                          <div key={gIdx} className="space-y-1">
+                            {group.date && (
+                              <div className="flex items-start space-x-2">
+                                <span className="text-slate-500 font-mono">o</span>
+                                <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
                               </div>
-                            </div>
-                            <div className="pl-5 text-slate-700 flex items-start space-x-2">
-                              <span className="text-slate-400 font-mono">o</span>
-                              <div>
-                                <strong className="text-slate-900">Valid Reason:</strong>{' '}
-                                <span>{item.task.unfinishedReason || 'Pending scheduled maintenance window.'}</span>
-                              </div>
-                            </div>
-                          </li>
+                            )}
+                            <ul className="space-y-1.5 pl-5 text-xs text-slate-900">
+                              {group.items.map((item, idx) => (
+                                <li key={idx} className="space-y-0.5">
+                                  <div className="flex items-start space-x-2">
+                                    <span className="text-slate-400 font-mono">o</span>
+                                    <div>
+                                      <strong className="text-slate-900">Task:</strong>{' '}
+                                      <span className="whitespace-pre-line">{item.task.title} — {item.task.description}</span>
+                                    </div>
+                                  </div>
+                                  <div className="pl-5 text-slate-700 flex items-start space-x-2">
+                                    <span className="text-slate-400 font-mono">o</span>
+                                    <div>
+                                      <strong className="text-slate-900">Valid Reason:</strong>{' '}
+                                      <span className="whitespace-pre-line">{item.task.unfinishedReason || 'Pending scheduled maintenance window.'}</span>
+                                    </div>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     )}
                   </section>
 
@@ -498,20 +727,32 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       List of Tasks Done Out of Scope from the Planned Tasks for the Week
                     </h3>
 
-                    {outOfScopeTasks.length === 0 ? (
+                    {groupedOutOfScopeTasks.length === 0 ? (
                       <p className="text-xs italic text-slate-500 pl-4">• No out-of-scope tasks executed during this period.</p>
                     ) : (
-                      <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                        {outOfScopeTasks.map((item, idx) => (
-                          <li key={idx} className="flex items-start space-x-2">
-                            <span className="text-slate-500 font-mono">o</span>
-                            <div>
-                              <strong className="text-slate-900">{item.task.title}:</strong>{' '}
-                              <span>{item.task.description}</span>
-                            </div>
-                          </li>
+                      <div className="space-y-2 text-xs text-slate-900">
+                        {groupedOutOfScopeTasks.map((group, gIdx) => (
+                          <div key={gIdx} className="space-y-1">
+                            {group.date && (
+                              <div className="flex items-start space-x-2">
+                                <span className="text-slate-500 font-mono">o</span>
+                                <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
+                              </div>
+                            )}
+                            <ul className="space-y-1 pl-5 text-xs text-slate-900">
+                              {group.items.map((item, idx) => (
+                                <li key={idx} className="flex items-start space-x-2">
+                                  <span className="text-slate-400 font-mono">o</span>
+                                  <div>
+                                    <strong className="text-slate-900">{item.task.title}:</strong>{' '}
+                                    <span className="whitespace-pre-line">{item.task.description}</span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     )}
                   </section>
 
@@ -521,17 +762,29 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       System Update to the Server
                     </h3>
 
-                    {serverUpdatesList.length === 0 ? (
+                    {groupedServerUpdates.length === 0 ? (
                       <p className="text-xs italic text-slate-500 pl-4">• No system server updates deployed during this period.</p>
                     ) : (
-                      <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                        {serverUpdatesList.map((update, idx) => (
-                          <li key={idx} className="flex items-start space-x-2">
-                            <span className="text-slate-500 font-mono">o</span>
-                            <span>{update}</span>
-                          </li>
+                      <div className="space-y-2 text-xs text-slate-900">
+                        {groupedServerUpdates.map((group, gIdx) => (
+                          <div key={gIdx} className="space-y-1">
+                            {group.date && (
+                              <div className="flex items-start space-x-2">
+                                <span className="text-slate-500 font-mono">o</span>
+                                <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
+                              </div>
+                            )}
+                            <ul className="space-y-1 pl-5 text-xs text-slate-900">
+                              {group.updates.map((update, idx) => (
+                                <li key={idx} className="flex items-start space-x-2">
+                                  <span className="text-slate-400 font-mono">o</span>
+                                  <span className="whitespace-pre-line">{update}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     )}
 
                     {/* Backend Dev Signature Lines */}
@@ -547,17 +800,29 @@ export const PrintableReport: React.FC<PrintableReportProps> = ({
                       Blockers
                     </h3>
 
-                    {blockersList.length === 0 ? (
+                    {groupedBlockers.length === 0 ? (
                       <p className="text-xs italic text-slate-500 pl-4">• None — No active blockers encountered.</p>
                     ) : (
-                      <ul className="space-y-1 pl-2 text-xs text-slate-900">
-                        {blockersList.map((blocker, idx) => (
-                          <li key={idx} className="flex items-start space-x-2">
-                            <span className="text-slate-500 font-mono">o</span>
-                            <span>{blocker}</span>
-                          </li>
+                      <div className="space-y-2 text-xs text-slate-900">
+                        {groupedBlockers.map((group, gIdx) => (
+                          <div key={gIdx} className="space-y-1">
+                            {group.date && (
+                              <div className="flex items-start space-x-2">
+                                <span className="text-slate-500 font-mono">o</span>
+                                <strong className="text-slate-900">{formatDateShort(group.date)}:</strong>
+                              </div>
+                            )}
+                            <ul className="space-y-1 pl-5 text-xs text-slate-900">
+                              {group.blockers.map((blocker, idx) => (
+                                <li key={idx} className="flex items-start space-x-2">
+                                  <span className="text-slate-400 font-mono">o</span>
+                                  <span className="whitespace-pre-line">{blocker}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     )}
 
                     {/* PM Signature Block */}

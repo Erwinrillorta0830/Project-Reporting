@@ -97,7 +97,7 @@ export const QAManagerView: React.FC<QAManagerViewProps> = ({
                       {log.developerName} ({taskProjectCode} • {log.date})
                     </span>
                   </div>
-                  <p className="text-xs text-slate-300">{task.description}</p>
+                  <p className="text-xs text-slate-300 whitespace-pre-line">{task.description}</p>
                   
                   {task.evidenceUrl && (
                     <div className="pt-2 space-y-2">

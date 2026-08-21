@@ -21,6 +21,7 @@ export interface TaskItem {
   qaAcknowledged: boolean;
   qaManagerName?: string;
   unfinishedReason?: string;
+  taskDate?: string;
 }
 
 export interface DailyLog {
