@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+body {
+  background-color: #020617;
+  color: #f8fafc;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background-color: #6366f1;
+  color: #ffffff;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="date"],
+select,
+textarea {
+  color-scheme: dark;
+}
+
+.font-outfit {
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* ============================================================================ */
+/* PRINT SPECIFIC STYLES - ZERO BORDER, ZERO DARK WRAPPER, CLEAN WHITE SHEETS */
+/* ============================================================================ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  *, ::before, ::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Reset all outer app containers to transparent white without borders */
+  html, 
+  body, 
+  #root, 
+  main, 
+  .min-h-screen, 
+  .paper-document-outer-wrapper,
+  .paper-document-outer-wrapper > div {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-width: 0 !important;
+    box-shadow: none !important;
+    min-height: auto !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+  }
+
+  /* Hide web app navigation bar, app footer, control buttons, modals, and toolbar badges */
+  header,
+  footer,
+  nav,
+  button,
+  .print\:hidden,
+  .paper-document-outer-wrapper > .select-none {
+    display: none !important;
+  }
+
+  /* Printable Document Sheet - Fixed A4 210mm x 297mm per page */
+  .document-page-sheet {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    padding: 10mm 15mm !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    border-width: 0 !important;
+    outline: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  .document-page-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  /* Preserve Letterhead and Footer subtle horizontal rule lines */
+  .document-header-letterhead,
+  .document-footer-letterhead {
+    border-color: #94a3b8 !important;
+  }
+
+  /* Watermark Image Opacity Safeguard */
+  img.watermark-image {
+    opacity: 0.05 !important;
+    filter: alpha(opacity=5) !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure text, images, and headers are fully visible */
+  .document-header-letterhead,
+  .document-footer-letterhead,
+  .document-page-sheet * {
+    visibility: visible !important;
+  }
+
+  img {
+    display: block !important;
+    visibility: visible !important;
+    max-width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
