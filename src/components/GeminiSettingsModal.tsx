@@ -141,10 +141,12 @@ export const GeminiSettingsModal: React.FC<GeminiSettingsModalProps> = ({
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-100 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"
             >
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash (Recommended & Standard)</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+              <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Fast & Lightweight - Recommended)</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash (Gemini 2.5 Flash)</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash (Gemini 1.5 Flash)</option>
+              <option value="gemini-1.5-pro">gemini-1.5-pro (Gemini 1.5 Pro)</option>
             </select>
           </div>
 

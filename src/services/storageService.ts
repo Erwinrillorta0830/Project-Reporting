@@ -271,7 +271,11 @@ export const saveDailyLogToSupabase = async (log: DailyLog): Promise<DailyLog[]>
           taskPayload.id = t.id;
         }
 
-        await supabase.from('tasks').upsert(taskPayload);
+        const { error: taskErr } = await supabase.from('tasks').upsert(taskPayload);
+        if (taskErr && (taskErr.code === 'PGRST204' || taskErr.message?.includes('task_date'))) {
+          delete taskPayload.task_date;
+          await supabase.from('tasks').upsert(taskPayload);
+        }
       }
     }
   } catch (err) {
@@ -362,7 +366,7 @@ export const getStoredGeminiConfig = (): GeminiConfig => {
     (import.meta as any).env?.NEXT_PUBLIC_GEMINI_API_KEY || 
     '';
 
-  return { apiKey: envKey, model: 'gemini-1.5-flash' };
+  return { apiKey: envKey, model: 'gemini-3.1-flash-lite' };
 };
 
 export const saveGeminiConfig = (config: GeminiConfig) => {

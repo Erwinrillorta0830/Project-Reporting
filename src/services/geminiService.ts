@@ -21,7 +21,7 @@ export const testGeminiAPIConnection = async (config: GeminiConfig): Promise<{ s
   }
 
   const trimmedKey = config.apiKey.trim();
-  const selectedModel = config.model || 'gemini-1.5-flash';
+  const selectedModel = config.model || 'gemini-3.1-flash-lite';
 
   try {
     const genAI = new GoogleGenerativeAI(trimmedKey);
@@ -55,7 +55,7 @@ export const improveDeveloperInput = async (
 ): Promise<DeveloperImprovementResult> => {
   if (config.apiKey && config.apiKey.trim() !== '') {
     const trimmedKey = config.apiKey.trim();
-    const selectedModel = config.model || 'gemini-1.5-flash';
+    const selectedModel = config.model || 'gemini-3.1-flash-lite';
 
     try {
       const genAI = new GoogleGenerativeAI(trimmedKey);

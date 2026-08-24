@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     qa_acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
     qa_manager_name TEXT DEFAULT 'Regine Lachica',
     unfinished_reason TEXT,
+    task_date DATE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
