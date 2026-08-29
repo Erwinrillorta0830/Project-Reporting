@@ -42,12 +42,12 @@ textarea {
 }
 
 /* ============================================================================ */
-/* PRINT SPECIFIC STYLES - ZERO BORDER, ZERO DARK WRAPPER, CLEAN WHITE SHEETS */
+/* PRINT SPECIFIC STYLES - CLEAN MULTI-PAGE PRINTING WITH NATIVE MARGINS */
 /* ============================================================================ */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0;
+    margin: 15mm 15mm 15mm 15mm;
   }
 
   *, ::before, ::after {
@@ -57,7 +57,7 @@ textarea {
     text-shadow: none !important;
   }
 
-  /* Reset all outer app containers to transparent white without borders */
+  /* Reset all outer app containers to white without borders */
   html, 
   body, 
   #root, 
@@ -71,14 +71,15 @@ textarea {
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
-    border-width: 0 !important;
     box-shadow: none !important;
     min-height: auto !important;
-    width: 210mm !important;
-    max-width: 210mm !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
   }
 
-  /* Hide web app navigation bar, app footer, control buttons, modals, and toolbar badges */
+  /* Hide web app navigation bar, control buttons, modals, and toolbar badges */
   header,
   footer,
   nav,
@@ -88,35 +89,52 @@ textarea {
     display: none !important;
   }
 
-  /* Printable Document Sheet - Fixed A4 210mm x 297mm per page */
+  /* Printable Document Container - Flow naturally with native printer margins */
   .document-page-sheet {
     display: block !important;
     visibility: visible !important;
     position: relative !important;
-    width: 210mm !important;
-    height: 297mm !important;
-    max-height: 297mm !important;
-    padding: 10mm 15mm !important;
+    width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
     margin: 0 !important;
     box-sizing: border-box !important;
     border: none !important;
-    border-width: 0 !important;
     outline: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     background: #ffffff !important;
-    background-color: #ffffff !important;
     color: #0f172a !important;
-    page-break-after: always !important;
-    break-after: page !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    overflow: hidden !important;
-  }
-
-  .document-page-sheet:last-child {
+    overflow: visible !important;
     page-break-after: auto !important;
     break-after: auto !important;
+  }
+
+  /* Prevent orphaned section headings */
+  h1, h2, h3, h4 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Allow section and task group containers to flow naturally across page boundaries */
+  section,
+  .task-item-group,
+  ul,
+  ol {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  /* Only individual list items, evidence blocks, signature lines, and headers/footers avoid breaking internally */
+  li,
+  .signature-block,
+  .evidence-block,
+  .document-header-letterhead,
+  .document-footer-letterhead {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   /* Preserve Letterhead and Footer subtle horizontal rule lines */
@@ -127,8 +145,8 @@ textarea {
 
   /* Watermark Image Opacity Safeguard */
   img.watermark-image {
-    opacity: 0.05 !important;
-    filter: alpha(opacity=5) !important;
+    opacity: 0.04 !important;
+    filter: alpha(opacity=4) !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }

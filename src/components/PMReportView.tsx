@@ -138,38 +138,38 @@ export const PMReportView: React.FC<PMReportViewProps> = ({
   };
 
   const handleExportPDF = async () => {
-    const el = document.querySelector('.paper-document-outer-wrapper') as HTMLElement || document.getElementById('printable-accomplishment-report');
+    const el = document.getElementById('printable-accomplishment-report') || (document.querySelector('.document-page-sheet') as HTMLElement);
     if (!el) return;
     setIsGeneratingPDF(true);
     try {
-      const sheets = el.querySelectorAll('.document-page-sheet');
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfPageHeight = pdf.internal.pageSize.getHeight();
 
-      if (sheets.length > 0) {
-        for (let i = 0; i < sheets.length; i++) {
-          const sheetEl = sheets[i] as HTMLElement;
-          const canvas = await html2canvas(sheetEl, {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: '#ffffff'
-          });
-          const imgData = canvas.toDataURL('image/jpeg', 0.98);
-          const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const totalPdfHeight = (imgHeight * pdfWidth) / imgWidth;
 
-          if (i > 0) pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, Math.min(imgHeight, pdfPageHeight));
-        }
-      } else {
-        const canvas = await html2canvas(el, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff'
-        });
-        const imgData = canvas.toDataURL('image/jpeg', 0.98);
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      let heightLeft = totalPdfHeight;
+      let position = 0;
+
+      // First page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+      heightLeft -= pdfPageHeight;
+
+      // Add additional pages if content height exceeds one page
+      while (heightLeft > 0) {
+        position = heightLeft - totalPdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalPdfHeight);
+        heightLeft -= pdfPageHeight;
       }
 
       pdf.save(`${reportType}-accomplishment-report-${reportPeriodLabel.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
