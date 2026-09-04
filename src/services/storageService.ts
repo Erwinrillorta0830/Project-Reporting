@@ -251,6 +251,24 @@ export const saveDailyLogToSupabase = async (log: DailyLog): Promise<DailyLog[]>
       .single();
 
     if (!logError && insertedLog && log.tasks) {
+      // 1. Delete tasks from Supabase DB that were removed in the UI
+      const { data: existingTasks } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('daily_log_id', insertedLog.id);
+
+      if (existingTasks && existingTasks.length > 0) {
+        const keepTaskIds = new Set(log.tasks.map(t => t.id).filter(isUUID));
+        const taskIdsToDelete = existingTasks
+          .map(t => t.id)
+          .filter(id => !keepTaskIds.has(id));
+
+        if (taskIdsToDelete.length > 0) {
+          await supabase.from('tasks').delete().in('id', taskIdsToDelete);
+        }
+      }
+
+      // 2. Upsert remaining/new tasks into Supabase DB
       for (const t of log.tasks) {
         const taskPayload: any = {
           daily_log_id: insertedLog.id,
@@ -263,8 +281,7 @@ export const saveDailyLogToSupabase = async (log: DailyLog): Promise<DailyLog[]>
           evidence_url: t.evidenceUrl,
           qa_acknowledged: t.qaAcknowledged,
           qa_manager_name: t.qaManagerName,
-          unfinished_reason: t.unfinishedReason,
-          task_date: t.taskDate || insertedLog.log_date
+          unfinished_reason: t.unfinishedReason
         };
 
         if (isUUID(t.id)) {
@@ -272,9 +289,8 @@ export const saveDailyLogToSupabase = async (log: DailyLog): Promise<DailyLog[]>
         }
 
         const { error: taskErr } = await supabase.from('tasks').upsert(taskPayload);
-        if (taskErr && (taskErr.code === 'PGRST204' || taskErr.message?.includes('task_date'))) {
-          delete taskPayload.task_date;
-          await supabase.from('tasks').upsert(taskPayload);
+        if (taskErr) {
+          console.warn('Supabase save task error:', taskErr);
         }
       }
     }
