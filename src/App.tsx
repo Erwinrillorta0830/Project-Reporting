@@ -21,6 +21,7 @@ import { BackendView } from './components/BackendView';
 import { QAManagerView } from './components/QAManagerView';
 import { PMReportView } from './components/PMReportView';
 import { GeneralManagerView } from './components/GeneralManagerView';
+import { AIReportAnalystView } from './components/AIReportAnalystView';
 import { GeminiSettingsModal } from './components/GeminiSettingsModal';
 import { TemplateConfigModal } from './components/TemplateConfigModal';
 import { RegisterManagementModal } from './components/RegisterManagementModal';
@@ -172,6 +173,17 @@ export function App() {
           <GeneralManagerView
             projects={projects}
             dailyLogs={dailyLogs}
+          />
+        )}
+
+        {role === 'ai_analyst' && (
+          <AIReportAnalystView
+            projects={projects}
+            selectedProjectId={selectedProjectId}
+            onProjectChange={setSelectedProjectId}
+            dailyLogs={dailyLogs}
+            geminiConfig={geminiConfig}
+            templateConfig={templateConfig}
           />
         )}
 

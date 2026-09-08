@@ -3,7 +3,8 @@ export type UserRole =
   | 'backend' 
   | 'qa_manager' 
   | 'project_manager' 
-  | 'general_manager';
+  | 'general_manager'
+  | 'ai_analyst';
 
 export type TaskStatus = 'in_progress' | 'done' | 'for_qa' | 'blocked';
 
@@ -88,3 +89,13 @@ export interface ReportFilter {
   startDate: string;
   endDate: string;
 }
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  timestamp: string;
+  isReport?: boolean;
+  reportTitle?: string;
+}
+

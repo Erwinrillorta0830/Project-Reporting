@@ -150,3 +150,126 @@ During this reporting period, the development team submitted **${logs.length} lo
 
 ${outOfScope > 0 ? `⚠️ **Note**: ${outOfScope} task(s) were completed out of the original weekly plan scope.` : 'All work remained aligned with scheduled weekly milestones.'} ${serverUpdates.length > 0 ? `🚀 **Deployments**: ${serverUpdates.length} system update(s) were pushed to server staging.` : ''} QA sign-offs have been attached below for formal physical signature by **${project.qaManagerName}**.`;
 };
+
+export interface ChatAnalystInput {
+  userPrompt: string;
+  chatHistory: { role: 'user' | 'model'; text: string }[];
+  projects: Project[];
+  selectedProjectId: string;
+  logs: DailyLog[];
+  config: GeminiConfig;
+}
+
+export const chatWithReportAnalyst = async (
+  input: ChatAnalystInput
+): Promise<string> => {
+  const { userPrompt, chatHistory, projects, selectedProjectId, logs, config } = input;
+  const currentProject = projects.find(p => p.id === selectedProjectId) || (projects.length > 0 ? projects[0] : undefined);
+
+  // Filter logs for selected project if specified
+  const projectLogs = (!selectedProjectId || selectedProjectId === 'all')
+    ? logs 
+    : logs.filter(l => l.projectId === selectedProjectId);
+
+  const logsSummary = projectLogs.map(l => ({
+    date: l.date,
+    developer: l.developerName,
+    projectId: l.projectId,
+    tasksCount: l.tasks.length,
+    tasks: l.tasks.map(t => ({
+      title: t.title,
+      description: t.description,
+      status: t.status,
+      isForQA: t.isForQA,
+      isOutofScope: t.isOutofScope,
+      qaAcknowledged: t.qaAcknowledged,
+      unfinishedReason: t.unfinishedReason
+    })),
+    plansTomorrow: l.plansForTomorrow,
+    blockers: l.blockers,
+    serverUpdates: l.serverUpdates,
+    backendDevAcknowledged: l.backendDevAcknowledged
+  }));
+
+  if (config.apiKey && config.apiKey.trim() !== '') {
+    const trimmedKey = config.apiKey.trim();
+    const selectedModel = config.model || 'gemini-1.5-flash';
+
+    try {
+      const genAI = new GoogleGenerativeAI(trimmedKey);
+      const model = genAI.getGenerativeModel({ model: selectedModel });
+
+      const systemInstruction = `You are an expert AI Report Analyst and Lead Technical Program Manager for Vertex Technologies Corporation (VTC).
+Your job is to read and analyze project accomplishment data, daily developer logs, QA reviews, and server deployment updates, and answer user queries, generate formatted reports, or provide actionable insights.
+
+Context Data Available:
+- Active Selected Project: ${currentProject ? `${currentProject.name} (${currentProject.code})` : 'All Projects'}
+- Total Projects Registered: ${projects.length} (${projects.map(p => `${p.name} [${p.code}]`).join(', ')})
+- Number of Daily Logs Loaded: ${projectLogs.length}
+
+Detailed Daily Logs JSON Data:
+${JSON.stringify(logsSummary, null, 2)}
+
+Instructions:
+1. Always base your analysis on the actual data provided above.
+2. If asked to generate a report, use clean Markdown headers, bullet points, statistics, and structured sections (Executive Summary, Key Deliverables, QA & Deployment Status, Blockers & Risks, Next Steps).
+3. If asked questions about tasks, developers, QA items, or server deployments, give direct, precise answers referencing specific developers, dates, or task names from the logs.
+4. Keep a professional, encouraging, and clear tone.`;
+
+      const formattedHistory = chatHistory.slice(-6).map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n\n');
+
+      const fullPrompt = `${systemInstruction}
+
+Conversation History:
+${formattedHistory}
+
+User Query: ${userPrompt}
+
+Response:`;
+
+      const response = await model.generateContent(fullPrompt);
+      const text = response.response.text();
+      if (text) return text;
+    } catch (err) {
+      console.warn('[Gemini Analyst Exception]', err);
+    }
+  }
+
+  // Smart Fallback response synthesizer when no API key or API call fails
+  const totalTasks = projectLogs.reduce((sum, l) => sum + l.tasks.length, 0);
+  const doneTasks = projectLogs.reduce((sum, l) => sum + l.tasks.filter(t => t.status === 'done').length, 0);
+  const qaTasks = projectLogs.reduce((sum, l) => sum + l.tasks.filter(t => t.isForQA).length, 0);
+  const blockers = projectLogs.filter(l => l.blockers && l.blockers.trim().toLowerCase() !== 'none' && l.blockers.trim() !== '');
+
+  const promptLower = userPrompt.toLowerCase();
+
+  if (promptLower.includes('blocker') || promptLower.includes('issue') || promptLower.includes('risk')) {
+    if (blockers.length === 0) {
+      return `### 🟢 Blockers & Risks Summary\n\nNo critical blockers reported across **${projectLogs.length} daily log(s)** for **${currentProject?.name || 'Selected Project'}**. All tasks are progressing smoothly.`;
+    }
+    return `### 🚨 Active Blockers & Risks Report\n\nFound **${blockers.length} reported blocker(s)**:\n\n` + 
+      blockers.map(b => `- **${b.developerName}** (${b.date}): ${b.blockers}`).join('\n');
+  }
+
+  if (promptLower.includes('qa') || promptLower.includes('testing')) {
+    const qaItems = projectLogs.flatMap(l => l.tasks.filter(t => t.isForQA).map(t => ({ dev: l.developerName, date: l.date, task: t })));
+    return `### 🧪 QA Testing Status Report\n\nTotal tasks marked for QA: **${qaTasks}**\n\n` +
+      (qaItems.length > 0 ? qaItems.map(q => `- **[${q.task.qaAcknowledged ? '✅ Signed Off' : '⏳ Pending QA'}]** ${q.task.title} (by ${q.dev} on ${q.date})`).join('\n') : 'No items currently queued for QA.');
+  }
+
+  if (promptLower.includes('report') || promptLower.includes('summary') || promptLower.includes('executive')) {
+    return `### 📊 Project Accomplishment Report — ${currentProject?.name || 'All Projects'}\n\n` +
+      `**Data Ingested**: ${projectLogs.length} Daily Log(s) | **Total Tasks**: ${totalTasks} | **Completed**: ${doneTasks} (${totalTasks > 0 ? Math.round((doneTasks/totalTasks)*100) : 0}%)\n\n` +
+      `#### 🚀 Executive Summary\n` +
+      `The team has completed **${doneTasks} out of ${totalTasks} tasks**. ${qaTasks} item(s) are undergoing QA review, and ${blockers.length} active blocker(s) require management attention.\n\n` +
+      `*Tip: Ensure your Gemini API key is active in Gemini Settings for deep custom conversational responses!*`;
+  }
+
+  return `### 🤖 AI Analyst Report Synthesis\n\nAnalyzed **${projectLogs.length} daily log entry(s)** with **${totalTasks} total task(s)** for **${currentProject?.name || 'Selected Project'}**.\n\n` +
+    `- **Completed Tasks**: ${doneTasks}\n` +
+    `- **QA Items Queued**: ${qaTasks}\n` +
+    `- **Blockers Reported**: ${blockers.length}\n\n` +
+    `**Analysis for your prompt**: "${userPrompt}"\n\n` +
+    `All log entries have been parsed successfully. Provide specific requests like *"Summarize blockers"*, *"List QA items"*, or *"Draft executive report"* for detailed breakdown.`;
+};
+

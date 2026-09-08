@@ -10,7 +10,8 @@ import {
   UserPlus,
   Server,
   ShieldCheck,
-  Building
+  Building,
+  BrainCircuit
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -153,6 +154,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Building className="w-3.5 h-3.5" />
               <span>General Manager</span>
+            </button>
+
+            {/* 6. AI Analyst & Report Generator */}
+            <button
+              type="button"
+              onClick={() => onRoleChange('ai_analyst')}
+              className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition whitespace-nowrap ${
+                currentRole === 'ai_analyst'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-indigo-400 hover:text-indigo-200 hover:bg-indigo-950/40 border border-indigo-500/20'
+              }`}
+              title="AI Report Data Analyst & Gemini Chatbox"
+            >
+              <BrainCircuit className="w-3.5 h-3.5" />
+              <span>AI Analyst</span>
             </button>
 
           </div>

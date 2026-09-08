@@ -1,0 +1,769 @@
+import React, { useState, useMemo } from 'react';
+import { Project, DailyLog, GeminiConfig, ChatMessage, DocumentTemplateConfig } from '../types';
+import { chatWithReportAnalyst } from '../services/geminiService';
+import { MarkdownRenderer } from './MarkdownRenderer';
+import { 
+  Sparkles, 
+  Send, 
+  Bot, 
+  User, 
+  BrainCircuit, 
+  ShieldAlert, 
+  CheckCircle2, 
+  Clock, 
+  FileText, 
+  Server, 
+  Printer, 
+  Copy, 
+  Check, 
+  RefreshCw, 
+  Zap, 
+  Filter, 
+  AlertTriangle,
+  X,
+  FileCheck
+} from 'lucide-react';
+
+interface AIReportAnalystViewProps {
+  projects: Project[];
+  selectedProjectId: string;
+  onProjectChange: (id: string) => void;
+  dailyLogs: DailyLog[];
+  geminiConfig: GeminiConfig;
+  templateConfig: DocumentTemplateConfig;
+}
+
+export const AIReportAnalystView: React.FC<AIReportAnalystViewProps> = ({
+  projects,
+  selectedProjectId,
+  onProjectChange,
+  dailyLogs,
+  geminiConfig,
+  templateConfig
+}) => {
+  const [dateFilter, setDateFilter] = useState<'all' | '7days' | '30days'>('all');
+  const [inputPrompt, setInputPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [copiedModal, setCopiedModal] = useState(false);
+  const [activeReportModal, setActiveReportModal] = useState<string | null>(null);
+
+  // Initial greeting message in chat history
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'init-1',
+      role: 'model',
+      text: `👋 **Hello! I am your AI Report Analyst & PM Assistant.**\n\nI have automatically ingested and parsed **${dailyLogs.length} daily logs** across your projects. You can ask me questions about developer progress, blockers, QA statuses, server updates, or request me to **generate customized executive reports**!\n\nTry selecting one of the quick prompts below or type your custom request.`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+  ]);
+
+  // Filter logs based on active filters
+  const filteredLogs = useMemo(() => {
+    let logs = dailyLogs;
+    if (selectedProjectId && selectedProjectId !== 'all') {
+      logs = logs.filter(l => l.projectId === selectedProjectId);
+    }
+    if (dateFilter === '7days') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      logs = logs.filter(l => new Date(l.date) >= sevenDaysAgo);
+    } else if (dateFilter === '30days') {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      logs = logs.filter(l => new Date(l.date) >= thirtyDaysAgo);
+    }
+    return logs;
+  }, [dailyLogs, selectedProjectId, dateFilter]);
+
+  // Calculated Metrics
+  const metrics = useMemo(() => {
+    const totalLogs = filteredLogs.length;
+    const allTasks = filteredLogs.flatMap(l => l.tasks);
+    const totalTasks = allTasks.length;
+    const doneTasks = allTasks.filter(t => t.status === 'done').length;
+    const qaTasks = allTasks.filter(t => t.isForQA).length;
+    const outOfScopeTasks = allTasks.filter(t => t.isOutofScope).length;
+    const blockers = filteredLogs.filter(l => l.blockers && l.blockers.trim().toLowerCase() !== 'none' && l.blockers.trim() !== '');
+    const serverUpdates = filteredLogs.filter(l => l.serverUpdates && l.serverUpdates.trim().length > 0);
+
+    const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    return {
+      totalLogs,
+      totalTasks,
+      doneTasks,
+      qaTasks,
+      outOfScopeTasks,
+      blockersCount: blockers.length,
+      serverUpdatesCount: serverUpdates.length,
+      completionRate,
+      blockersList: blockers,
+      serverUpdatesList: serverUpdates,
+      qaTasksList: allTasks.filter(t => t.isForQA)
+    };
+  }, [filteredLogs]);
+
+  // Selected Project object
+  const currentProject = projects.find(p => p.id === selectedProjectId);
+
+  // Quick Prompt Suggestions
+  const quickPrompts = [
+    "Summarize overall team progress and critical blockers",
+    "Which tasks are currently ready for QA testing?",
+    "Generate a Weekly Executive Summary Report for General Manager",
+    "Analyze out-of-scope work and unfinished task reasons",
+    "List all server deployment updates and backend changes"
+  ];
+
+  const handleSendMessage = async (customPrompt?: string) => {
+    const promptToSend = customPrompt || inputPrompt;
+    if (!promptToSend.trim() || isGenerating) return;
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      text: promptToSend.trim(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    if (!customPrompt) setInputPrompt('');
+    setIsGenerating(true);
+
+    try {
+      const history = messages.map(m => ({ role: m.role, text: m.text }));
+      const aiResponseText = await chatWithReportAnalyst({
+        userPrompt: promptToSend.trim(),
+        chatHistory: history,
+        projects,
+        selectedProjectId,
+        logs: filteredLogs,
+        config: geminiConfig
+      });
+
+      const modelMsg: ChatMessage = {
+        id: `model-${Date.now()}`,
+        role: 'model',
+        text: aiResponseText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isReport: promptToSend.toLowerCase().includes('report') || promptToSend.toLowerCase().includes('summary') || aiResponseText.includes('###')
+      };
+
+      setMessages(prev => [...prev, modelMsg]);
+    } catch (err) {
+      console.error('Error generating AI response:', err);
+      const errorMsg: ChatMessage = {
+        id: `error-${Date.now()}`,
+        role: 'model',
+        text: `⚠️ **Error Processing Request**: Could not generate AI response. Please verify your Gemini API Key in settings.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = (text: string, index: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleCopyModalContent = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedModal(true);
+    setTimeout(() => setCopiedModal(false), 2000);
+  };
+
+  const handleClearHistory = () => {
+    setMessages([
+      {
+        id: 'init-1',
+        role: 'model',
+        text: `👋 **Chat history cleared.** Ready to read and analyze your report data! Type a prompt or choose a quick suggestion below.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+  };
+
+  const fontFamilyStyle = {
+    fontFamily: templateConfig.fontFamily === 'Times New Roman' 
+      ? '"Times New Roman", Times, Georgia, serif'
+      : templateConfig.fontFamily === 'Georgia'
+      ? 'Georgia, serif'
+      : templateConfig.fontFamily === 'Arial'
+      ? 'Arial, Helvetica, sans-serif'
+      : 'Inter, sans-serif'
+  };
+
+  return (
+    <div className="space-y-8 animate-fadeIn">
+      
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950/80 to-purple-950/70 border border-indigo-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl print:hidden">
+        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-1/3 -mb-10 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Gemini AI Intelligent Data Engine</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-outfit tracking-tight">
+              AI Report Analyst & Generator
+            </h1>
+            <p className="text-sm text-slate-300">
+              Interactive AI assistant grounded in live daily logs, QA sign-offs, and backend deployment records. Prompt Gemini to analyze trends, detect blockers, or generate customized executive reports instantly.
+            </p>
+          </div>
+
+          {/* Filter Controls */}
+          <div className="flex flex-wrap items-center gap-3 bg-slate-950/80 backdrop-blur border border-slate-800 p-3 rounded-2xl">
+            {/* Project Filter */}
+            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300">
+              <Filter className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Project:</span>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => onProjectChange(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500"
+              >
+                <option value="all">All Projects ({projects.length})</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Filter */}
+            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-300 border-l border-slate-800 pl-3">
+              <Clock className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Period:</span>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as any)}
+                className="bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500"
+              >
+                <option value="all">All Time</option>
+                <option value="7days">Last 7 Days</option>
+                <option value="30days">Last 30 Days</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Visual Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 print:hidden">
+        {/* 1. Total Logs Read */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-indigo-500/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-400">Logs Ingested</span>
+            <FileText className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-white font-outfit">{metrics.totalLogs}</span>
+            <span className="text-[11px] text-slate-500 block">Daily log records</span>
+          </div>
+        </div>
+
+        {/* 2. Total Tasks & Completion */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-emerald-500/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-400">Task Completion</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline space-x-1">
+              <span className="text-2xl font-black text-emerald-400 font-outfit">{metrics.completionRate}%</span>
+              <span className="text-xs text-slate-400">({metrics.doneTasks}/{metrics.totalTasks})</span>
+            </div>
+            <span className="text-[11px] text-slate-500 block">Done / Total Tasks</span>
+          </div>
+        </div>
+
+        {/* 3. QA Items Queued */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-cyan-500/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-400">QA Queue</span>
+            <Zap className="w-4 h-4 text-cyan-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-cyan-300 font-outfit">{metrics.qaTasks}</span>
+            <span className="text-[11px] text-slate-500 block">Ready for QA testing</span>
+          </div>
+        </div>
+
+        {/* 4. Blockers Reported */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-rose-500/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-400">Active Blockers</span>
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-rose-400 font-outfit">{metrics.blockersCount}</span>
+            <span className="text-[11px] text-slate-500 block">Requires PM focus</span>
+          </div>
+        </div>
+
+        {/* 5. Server Deployments */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-purple-500/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-400">Deployments</span>
+            <Server className="w-4 h-4 text-purple-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-purple-300 font-outfit">{metrics.serverUpdatesCount}</span>
+            <span className="text-[11px] text-slate-500 block">Backend server updates</span>
+          </div>
+        </div>
+
+        {/* 6. Out of Scope */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-amber-500/40 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-400">Out-of-Scope</span>
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-amber-400 font-outfit">{metrics.outOfScopeTasks}</span>
+            <span className="text-[11px] text-slate-500 block">Extra tasks completed</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Layout: Split into Data Highlights (Left) & Gemini Chatbox (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 print:hidden">
+        
+        {/* Left Column: Parsed Data Insights Summary Cards (4 cols) */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* Active Data Ingestion Status Card */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <BrainCircuit className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-bold text-slate-100 text-sm">Data Ingestion Context</h3>
+              </div>
+              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-400 border border-emerald-800">
+                LIVE READ
+              </span>
+            </div>
+
+            <div className="text-xs text-slate-300 space-y-2">
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Active Scope:</span>
+                <span className="font-semibold text-slate-100">{currentProject ? currentProject.name : 'All Projects'}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Parsed Logs:</span>
+                <span className="font-semibold text-indigo-300">{filteredLogs.length} logs</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">QA Sign-off Ready:</span>
+                <span className="font-semibold text-cyan-300">{metrics.qaTasks} items</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-400">Gemini Engine API:</span>
+                <span className={`font-semibold ${geminiConfig.apiKey ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {geminiConfig.apiKey ? 'Connected & Active' : 'Fallback Synthesizer Active'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Critical Blockers Panel */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center space-x-2 text-rose-400 font-bold text-sm border-b border-slate-800 pb-2">
+              <ShieldAlert className="w-4 h-4" />
+              <span>Reported Blockers ({metrics.blockersCount})</span>
+            </div>
+
+            {metrics.blockersList.length === 0 ? (
+              <div className="text-xs text-slate-400 italic py-2">
+                No active blockers reported in the current selection.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                {metrics.blockersList.map((log, idx) => (
+                  <div key={idx} className="bg-rose-950/30 border border-rose-900/50 rounded-xl p-3 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-300 font-semibold">
+                      <span className="text-rose-300">{log.developerName}</span>
+                      <span className="text-[10px] text-slate-400">{log.date}</span>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">{log.blockers}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Server Deployments */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
+            <div className="flex items-center space-x-2 text-purple-400 font-bold text-sm border-b border-slate-800 pb-2">
+              <Server className="w-4 h-4" />
+              <span>Server Deployments ({metrics.serverUpdatesCount})</span>
+            </div>
+
+            {metrics.serverUpdatesList.length === 0 ? (
+              <div className="text-xs text-slate-400 italic py-2">
+                No backend server updates reported in current selection.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                {metrics.serverUpdatesList.map((log, idx) => (
+                  <div key={idx} className="bg-purple-950/30 border border-purple-900/50 rounded-xl p-3 text-xs space-y-1">
+                    <div className="flex justify-between text-slate-300 font-semibold">
+                      <span className="text-purple-300">{log.developerName}</span>
+                      <span className="text-[10px] text-slate-400">{log.date}</span>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">{log.serverUpdates}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* Right Column: Interactive Gemini Chatbox & Report Generator (8 cols) */}
+        <div className="lg:col-span-8 flex flex-col bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden min-h-[620px]">
+          
+          {/* Chat Header Bar */}
+          <div className="bg-slate-950 px-6 py-4 border-b border-slate-800/80 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <Sparkles className="w-4 h-4 text-white animate-pulse" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white font-outfit">Gemini Report Analyst Chatbox</h2>
+                <p className="text-[11px] text-slate-400">
+                  Model: <span className="text-indigo-400 font-semibold">{geminiConfig.model || 'gemini-1.5-flash'}</span> • Real-time Data Context Active
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClearHistory}
+              className="flex items-center space-x-1 text-slate-400 hover:text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-800 transition"
+              title="Clear chat history"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Clear Chat</span>
+            </button>
+          </div>
+
+          {/* Quick Suggestions Bar */}
+          <div className="bg-slate-950/60 px-6 py-3 border-b border-slate-800/60 flex items-center space-x-2 overflow-x-auto">
+            <span className="text-[11px] font-semibold text-indigo-400 whitespace-nowrap flex items-center space-x-1">
+              <Zap className="w-3 h-3" />
+              <span>Quick Prompts:</span>
+            </span>
+            <div className="flex items-center space-x-2">
+              {quickPrompts.map((promptText, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSendMessage(promptText)}
+                  disabled={isGenerating}
+                  className="bg-slate-800/80 hover:bg-indigo-900/60 text-slate-300 hover:text-indigo-200 text-[11px] font-medium px-3 py-1 rounded-full border border-slate-700 hover:border-indigo-500/50 whitespace-nowrap transition disabled:opacity-50"
+                >
+                  {promptText}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Chat Messages Log Window */}
+          <div className="flex-1 p-6 space-y-4 overflow-y-auto max-h-[480px]">
+            {messages.map((msg, index) => (
+              <div
+                key={msg.id || index}
+                className={`flex space-x-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                {/* Avatar for Model */}
+                {msg.role === 'model' && (
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center flex-shrink-0 mt-1">
+                    <Bot className="w-4 h-4 text-indigo-400" />
+                  </div>
+                )}
+
+                {/* Message Bubble Content */}
+                <div
+                  className={`max-w-[85%] rounded-2xl p-4 text-xs leading-relaxed space-y-2 shadow-lg ${
+                    msg.role === 'user'
+                      ? 'bg-indigo-600 text-white rounded-tr-none'
+                      : 'bg-slate-950 border border-slate-800 text-slate-200 rounded-tl-none'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 pb-1 text-[10px] font-semibold opacity-70">
+                    <span>{msg.role === 'user' ? 'You' : 'Gemini AI Analyst'}</span>
+                    <span>{msg.timestamp}</span>
+                  </div>
+
+                  {/* Formatted Markdown Content */}
+                  <MarkdownRenderer content={msg.text} isPrintMode={false} />
+
+                  {/* Actions for Model Responses */}
+                  {msg.role === 'model' && (
+                    <div className="flex items-center space-x-3 border-t border-slate-800/80 pt-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(msg.text, index)}
+                        className="flex items-center space-x-1 text-slate-400 hover:text-slate-200 transition"
+                      >
+                        {copiedIndex === index ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+
+                      {msg.isReport && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveReportModal(msg.text)}
+                          className="flex items-center space-x-1 text-indigo-400 hover:text-indigo-300 font-semibold transition"
+                        >
+                          <Printer className="w-3 h-3" />
+                          <span>Preview & Print Generated Report</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Avatar for User */}
+                {msg.role === 'user' && (
+                  <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 mt-1">
+                    <User className="w-4 h-4 text-slate-300" />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Typing Indicator while generating */}
+            {isGenerating && (
+              <div className="flex space-x-3 justify-start">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center flex-shrink-0 animate-pulse">
+                  <Bot className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div className="bg-slate-950 border border-slate-800 text-slate-400 rounded-2xl rounded-tl-none p-4 text-xs flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400 animate-spin" />
+                  <span>Reading report database & synthesizing response...</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Input Prompt Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="p-4 bg-slate-950 border-t border-slate-800 flex items-center space-x-3"
+          >
+            <input
+              type="text"
+              value={inputPrompt}
+              onChange={(e) => setInputPrompt(e.target.value)}
+              placeholder="Ask Gemini to analyze logs or generate a custom report (e.g. 'Draft executive report for IDS project')..."
+              disabled={isGenerating}
+              className="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 text-slate-100 text-xs rounded-xl px-4 py-3 focus:outline-none transition placeholder-slate-500"
+            />
+            <button
+              type="submit"
+              disabled={!inputPrompt.trim() || isGenerating}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-xl font-semibold text-xs transition flex items-center space-x-2 shadow-lg shadow-indigo-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span>Send</span>
+              <Send className="w-3.5 h-3.5" />
+            </button>
+          </form>
+
+        </div>
+
+      </div>
+
+      {/* Generated Report Preview & Official Corporate Printable Modal Sheet */}
+      {activeReportModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+          
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-2xl print:bg-white print:border-none print:shadow-none print:p-0 print:max-w-none">
+            
+            {/* Modal Controls Bar (Hidden during actual print) */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 print:hidden">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center">
+                  <FileCheck className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-outfit">Official AI Generated Report</h3>
+                  <p className="text-[11px] text-slate-400">Formatted with Corporate Letterhead Canvas & Signature Sign-offs</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyModalContent(activeReportModal)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 border border-slate-700 transition"
+                >
+                  {copiedModal ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Copy Text</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-lg shadow-indigo-600/30 transition"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print / Save PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveReportModal(null)}
+                  className="text-slate-400 hover:text-white p-2 rounded-xl border border-slate-800 hover:bg-slate-800 transition"
+                  title="Close modal"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Official Corporate Printable Sheet Canvas */}
+            <div
+              style={fontFamilyStyle}
+              className="printable-document document-page-sheet bg-white text-slate-900 p-8 sm:p-12 border border-slate-300 rounded-2xl shadow-2xl mx-auto relative leading-relaxed transition-all duration-300 print:m-0 print:p-0 print:border-none print:shadow-none print:rounded-none"
+            >
+              {/* Corporate Watermark Image */}
+              {templateConfig.showWatermark && templateConfig.watermarkLogoUrl && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden select-none z-0">
+                  <img 
+                    src={templateConfig.watermarkLogoUrl} 
+                    alt="Corporate Watermark" 
+                    className="watermark-image w-[420px] h-[420px] object-contain opacity-5"
+                  />
+                </div>
+              )}
+
+              <div className="relative z-10 space-y-6">
+                
+                {/* CORPORATE LETTERHEAD HEADER */}
+                {templateConfig.showLetterhead && (
+                  <div className="document-header-letterhead pb-4 border-b border-slate-400 text-center">
+                    {templateConfig.headerLogoUrl ? (
+                      <div className="flex items-center justify-center">
+                        <img 
+                          src={templateConfig.headerLogoUrl} 
+                          alt={templateConfig.companyName} 
+                          className="max-h-20 max-w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900 font-serif">
+                          {templateConfig.companyName}
+                        </h1>
+                        <p className="text-[11px] text-slate-600 tracking-widest">{templateConfig.tagline}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* REPORT METADATA BANNER */}
+                <div className="bg-slate-50 border-l-4 border-indigo-600 p-4 rounded-r-xl space-y-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs uppercase font-extrabold tracking-wider text-indigo-950 font-outfit">
+                      {currentProject ? `${currentProject.name} (${currentProject.code})` : 'All Projects Scope'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Generated: {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <h2 className="text-base font-bold text-slate-900 font-serif">
+                    AI Accomplishment & Status Analysis Report
+                  </h2>
+                  <p className="text-[11px] text-slate-600">
+                    Prepared by: Vertex Technologies Corporation AI Report Analyst • Grounded in Supabase Live Log Records
+                  </p>
+                </div>
+
+                {/* FORMATTED REPORT BODY */}
+                <div className="py-2 text-slate-900 text-xs">
+                  <MarkdownRenderer content={activeReportModal} isPrintMode={true} />
+                </div>
+
+                {/* FORMAL SIGNATURE STAMP BLOCK */}
+                <div className="pt-10 border-t border-slate-300 grid grid-cols-1 sm:grid-cols-3 gap-6 text-slate-900 print:break-inside-avoid">
+                  
+                  {/* QA Manager */}
+                  <div className="space-y-8 text-center">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      {templateConfig.qaSignatureLabel || 'Signature of QA Manager'}
+                    </div>
+                    <div className="border-t border-slate-900 pt-1">
+                      <div className="font-bold text-xs text-slate-900">{currentProject?.qaManagerName || 'Regine Lachica'}</div>
+                      <div className="text-[10px] text-slate-500">Quality Assurance Lead</div>
+                    </div>
+                  </div>
+
+                  {/* Backend Lead */}
+                  <div className="space-y-8 text-center">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      {templateConfig.backendSignatureLabel || 'Acknowledgement of Backend Dev'}
+                    </div>
+                    <div className="border-t border-slate-900 pt-1">
+                      <div className="font-bold text-xs text-slate-900">{currentProject?.backendLeadName || 'James Ed Patrick Desear'}</div>
+                      <div className="text-[10px] text-slate-500">Backend Systems Dev Lead</div>
+                    </div>
+                  </div>
+
+                  {/* General Manager */}
+                  <div className="space-y-8 text-center">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      {templateConfig.generalManagerSignatureLabel || 'General Manager Approval'}
+                    </div>
+                    <div className="border-t border-slate-900 pt-1">
+                      <div className="font-bold text-xs text-slate-900">{currentProject?.generalManagerName || 'General Manager'}</div>
+                      <div className="text-[10px] text-slate-500">Executive Management</div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+    </div>
+  );
+};
