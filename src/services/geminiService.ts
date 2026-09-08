@@ -214,7 +214,8 @@ Instructions:
 1. Always base your analysis on the actual data provided above.
 2. If asked to generate a report, use clean Markdown headers, bullet points, statistics, and structured sections (Executive Summary, Key Deliverables, QA & Deployment Status, Blockers & Risks, Next Steps).
 3. If asked questions about tasks, developers, QA items, or server deployments, give direct, precise answers referencing specific developers, dates, or task names from the logs.
-4. Keep a professional, encouraging, and clear tone.`;
+4. Keep a professional, encouraging, and clear tone.
+5. CRITICAL REQUIREMENT: When generating reports or answering queries, NEVER include conversational filler or openings (e.g. "Certainly!", "Sure, here are...", "Below is the report...", "As an AI model..."). Start IMMEDIATELY with the report title or main content. Write in a formal, human corporate reporting tone.`;
 
       const formattedHistory = chatHistory.slice(-6).map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`).join('\n\n');
 
