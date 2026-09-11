@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
     code TEXT NOT NULL UNIQUE,
     description TEXT,
     qa_manager_name TEXT DEFAULT 'Regine Lachica',
+    qa_manager_email TEXT DEFAULT 'reginevertex1201@gmail.com',
     backend_lead_name TEXT DEFAULT 'James Ed Patrick Desear',
     general_manager_name TEXT DEFAULT 'Erwin Rillorta',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS public.document_template_configs (
     show_letterhead BOOLEAN DEFAULT TRUE,
     qa_signature_label TEXT DEFAULT 'Signature of QA Manager',
     backend_signature_label TEXT DEFAULT 'Acknowledgement of Backend Dev',
+    qa_manager_email TEXT DEFAULT 'reginevertex1201@gmail.com',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -147,3 +149,20 @@ CREATE POLICY "Allow public insert/update on tasks" ON public.tasks FOR ALL USIN
 
 CREATE POLICY "Allow public read access on document_template_configs" ON public.document_template_configs FOR SELECT USING (true);
 CREATE POLICY "Allow public update on document_template_configs" ON public.document_template_configs FOR ALL USING (true);
+
+-- ============================================================================
+-- AUTOMATED 5:00 AM MONDAY TO FRIDAY CRON JOB SCHEDULER
+-- Option for Supabase pg_cron + pg_net extension
+-- ============================================================================
+-- SELECT cron.schedule(
+--   'send-daily-qa-email-5am',
+--   '0 5 * * 1-5', -- Every Monday to Friday at 5:00 AM
+--   $$
+--   SELECT net.http_post(
+--       url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-qa-daily-email',
+--       headers:='{"Content-Type": "application/json"}'::jsonb,
+--       body:='{"qa_manager_email": "reginevertex1201@gmail.com"}'::jsonb
+--   );
+--   $$
+-- );
+

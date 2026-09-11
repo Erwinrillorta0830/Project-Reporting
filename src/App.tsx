@@ -25,6 +25,10 @@ import { AIReportAnalystView } from './components/AIReportAnalystView';
 import { GeminiSettingsModal } from './components/GeminiSettingsModal';
 import { TemplateConfigModal } from './components/TemplateConfigModal';
 import { RegisterManagementModal } from './components/RegisterManagementModal';
+import { 
+  initQACronScheduler, 
+  stopQACronScheduler 
+} from './services/qaCronSchedulerService';
 import { FileText, Sparkles, Database } from 'lucide-react';
 
 export function App() {
@@ -69,6 +73,22 @@ export function App() {
 
     loadSupabaseData();
   }, []);
+
+  // Initialize automated 5:00 AM Mon-Fri QA Email Scheduler
+  useEffect(() => {
+    if (dailyLogs.length >= 0) {
+      initQACronScheduler(
+        () => dailyLogs,
+        () => projects,
+        () => templateConfig.qaManagerEmail || projects[0]?.qaManagerEmail || 'reginevertex1201@gmail.com',
+        () => projects[0]?.qaManagerName || 'Regine Lachica'
+      );
+    }
+
+    return () => {
+      stopQACronScheduler();
+    };
+  }, [dailyLogs, projects, templateConfig]);
 
   const handleSaveLog = async (newLog: DailyLog) => {
     const updatedLogs = await saveDailyLogToSupabase(newLog);
@@ -131,6 +151,7 @@ export function App() {
           <DeveloperView
             projects={projects}
             selectedProjectId={selectedProjectId}
+            onProjectChange={setSelectedProjectId}
             developers={developers}
             dailyLogs={dailyLogs}
             onSaveLog={handleSaveLog}
@@ -142,6 +163,7 @@ export function App() {
           <BackendView
             projects={projects}
             selectedProjectId={selectedProjectId}
+            onProjectChange={setSelectedProjectId}
             developers={developers}
             dailyLogs={dailyLogs}
             onSaveLog={handleSaveLog}

@@ -5,6 +5,7 @@ import { Server, CheckCircle2, Send, Calendar, ShieldCheck, Database, HardDrive,
 interface BackendViewProps {
   projects: Project[];
   selectedProjectId: string;
+  onProjectChange?: (projectId: string) => void;
   developers: Developer[];
   dailyLogs: DailyLog[];
   onSaveLog: (log: DailyLog) => void;
@@ -13,6 +14,7 @@ interface BackendViewProps {
 export const BackendView: React.FC<BackendViewProps> = ({
   projects,
   selectedProjectId,
+  onProjectChange,
   developers,
   dailyLogs,
   onSaveLog

@@ -46,6 +46,7 @@ export interface Project {
   code: string;
   description: string;
   qaManagerName: string;
+  qaManagerEmail?: string;
   backendLeadName: string;
   generalManagerName?: string;
 }
@@ -78,6 +79,18 @@ export interface DocumentTemplateConfig {
   qaSignatureLabel: string;
   backendSignatureLabel: string;
   generalManagerSignatureLabel?: string;
+  qaManagerEmail?: string;
+}
+
+export interface QAEmailLog {
+  id: string;
+  sentAt: string; // ISO String
+  recipientEmail: string;
+  taskCount: number;
+  status: 'success' | 'failed';
+  triggerType: 'scheduled_5am' | 'manual';
+  messageId?: string;
+  error?: string;
 }
 
 export type ReportType = 'daily' | 'weekly';
@@ -98,4 +111,5 @@ export interface ChatMessage {
   isReport?: boolean;
   reportTitle?: string;
 }
+
 

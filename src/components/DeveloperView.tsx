@@ -26,6 +26,7 @@ import {
 interface DeveloperViewProps {
   projects: Project[];
   selectedProjectId: string;
+  onProjectChange?: (projectId: string) => void;
   developers: Developer[];
   dailyLogs: DailyLog[];
   onSaveLog: (log: DailyLog) => void;
@@ -35,6 +36,7 @@ interface DeveloperViewProps {
 export const DeveloperView: React.FC<DeveloperViewProps> = ({
   projects,
   selectedProjectId,
+  onProjectChange,
   developers,
   dailyLogs,
   onSaveLog,
@@ -92,6 +94,11 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const handleEditLog = (log: DailyLog) => {
+    const targetProjId = log.tasks?.[0]?.projectId || log.projectId || currentProject.id;
+    if (onProjectChange && targetProjId && targetProjId !== selectedProjectId) {
+      onProjectChange(targetProjId);
+    }
+
     setEditingLogId(log.id);
     setDeveloperName(log.developerName);
     setLogDate(log.date);
@@ -101,7 +108,7 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
         : [
             {
               id: `task-${Date.now()}-1`,
-              projectId: log.projectId || currentProject.id,
+              projectId: targetProjId,
               title: '',
               description: '',
               status: 'done',
@@ -175,6 +182,10 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
       }
       return t;
     }));
+
+    if (field === 'projectId' && value && onProjectChange && value !== selectedProjectId) {
+      onProjectChange(value);
+    }
   };
 
   const handleAIImprove = async () => {
@@ -233,14 +244,15 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
     }
 
     const existingLog = editingLogId ? dailyLogs.find(l => l.id === editingLogId) : null;
+    const primaryProjectId = validTasks[0]?.projectId || currentProject.id;
 
     const newLog: DailyLog = {
       id: editingLogId || `log-${Date.now()}`,
-      projectId: currentProject.id,
+      projectId: primaryProjectId,
       developerName: developerName.trim(),
       date: logDate,
       tasks: validTasks.map(t => {
-        const taskProjId = t.projectId || currentProject.id;
+        const taskProjId = t.projectId || primaryProjectId;
         const taskProj = projects.find(p => p.id === taskProjId) || currentProject;
         return {
           ...t,
@@ -283,7 +295,10 @@ export const DeveloperView: React.FC<DeveloperViewProps> = ({
 
   // Recent logs for this project
   const projectLogs = dailyLogs
-    .filter(l => l.projectId === currentProject.id)
+    .filter(l => 
+      l.projectId === currentProject.id || 
+      l.tasks?.some(t => (t.projectId || l.projectId) === currentProject.id)
+    )
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return (

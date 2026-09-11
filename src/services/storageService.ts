@@ -10,6 +10,7 @@ export const INITIAL_PROJECTS: Project[] = [
     code: 'IDS',
     description: 'Enterprise Purchase Order receiving, serial validation, and dispatch management system',
     qaManagerName: 'Regine Lachica',
+    qaManagerEmail: 'reginevertex1201@gmail.com',
     backendLeadName: 'James Ed Patrick Desear'
   },
   {
@@ -18,6 +19,7 @@ export const INITIAL_PROJECTS: Project[] = [
     code: 'VOS Sync',
     description: 'Real-time job search UX, encrypted messaging, and ATS candidate pipeline',
     qaManagerName: 'Regine Lachica',
+    qaManagerEmail: 'reginevertex1201@gmail.com',
     backendLeadName: 'James Ed Patrick Desear'
   }
 ];
@@ -63,7 +65,8 @@ export const INITIAL_TEMPLATE_CONFIG: DocumentTemplateConfig = {
   showWatermark: true,
   showLetterhead: true,
   qaSignatureLabel: 'Signature of QA Manager',
-  backendSignatureLabel: 'Acknowledgement of Backend Dev'
+  backendSignatureLabel: 'Acknowledgement of Backend Dev',
+  qaManagerEmail: 'reginevertex1201@gmail.com'
 };
 
 const TODAY = new Date().toISOString().split('T')[0];
@@ -93,6 +96,7 @@ export const fetchProjectsFromSupabase = async (): Promise<Project[]> => {
         code: p.code,
         description: p.description || '',
         qaManagerName: p.qa_manager_name || 'Regine Lachica',
+        qaManagerEmail: p.qa_manager_email || 'reginevertex1201@gmail.com',
         backendLeadName: p.backend_lead_name || 'James Ed Patrick Desear'
       }));
     }
@@ -113,6 +117,7 @@ export const saveProjectToSupabase = async (project: Project): Promise<Project[]
       code: project.code,
       description: project.description,
       qa_manager_name: project.qaManagerName,
+      qa_manager_email: project.qaManagerEmail || 'reginevertex1201@gmail.com',
       backend_lead_name: project.backendLeadName
     });
   } catch (err) {
@@ -326,7 +331,8 @@ export const fetchTemplateConfigFromSupabase = async (): Promise<DocumentTemplat
         showWatermark: data.show_watermark,
         showLetterhead: data.show_letterhead,
         qaSignatureLabel: data.qa_signature_label,
-        backendSignatureLabel: data.backend_signature_label
+        backendSignatureLabel: data.backend_signature_label,
+        qaManagerEmail: data.qa_manager_email || 'reginevertex1201@gmail.com'
       };
     }
   } catch (err) {
@@ -355,7 +361,8 @@ export const saveTemplateConfigToSupabase = async (config: DocumentTemplateConfi
       show_watermark: config.showWatermark,
       show_letterhead: config.showLetterhead,
       qa_signature_label: config.qaSignatureLabel,
-      backend_signature_label: config.backendSignatureLabel
+      backend_signature_label: config.backendSignatureLabel,
+      qa_manager_email: config.qaManagerEmail || 'reginevertex1201@gmail.com'
     });
   } catch (err) {
     console.warn('Supabase save template config error:', err);

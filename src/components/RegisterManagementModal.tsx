@@ -33,6 +33,7 @@ export const RegisterManagementModal: React.FC<RegisterManagementModalProps> = (
   const [projCode, setProjCode] = useState('');
   const [projDesc, setProjDesc] = useState('');
   const [qaManager, setQaManager] = useState('');
+  const [qaEmailInput, setQaEmailInput] = useState('reginevertex1201@gmail.com');
   const [backendLead, setBackendLead] = useState('');
 
   const [successMsg, setSuccessMsg] = useState('');
@@ -66,8 +67,9 @@ export const RegisterManagementModal: React.FC<RegisterManagementModalProps> = (
       name: projName.trim(),
       code: projCode.trim().toUpperCase(),
       description: projDesc.trim(),
-      qaManagerName: qaManager.trim() || 'Sarah Jenkins (QA Manager)',
-      backendLeadName: backendLead.trim() || 'Lead Backend Dev'
+      qaManagerName: qaManager.trim() || 'Regine Lachica',
+      qaManagerEmail: qaEmailInput.trim() || 'reginevertex1201@gmail.com',
+      backendLeadName: backendLead.trim() || 'James Ed Patrick Desear'
     };
 
     onAddProject(newProj);
@@ -75,6 +77,7 @@ export const RegisterManagementModal: React.FC<RegisterManagementModalProps> = (
     setProjCode('');
     setProjDesc('');
     setQaManager('');
+    setQaEmailInput('reginevertex1201@gmail.com');
     setBackendLead('');
     setSuccessMsg('Project registered successfully!');
     setTimeout(() => setSuccessMsg(''), 3000);

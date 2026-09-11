@@ -235,6 +235,16 @@ export const TemplateConfigModal: React.FC<TemplateConfigModalProps> = ({
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
               />
             </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-cyan-400 mb-1">QA Manager Email (Daily 5:00 AM Mon-Fri Digest Recipient)</label>
+              <input
+                type="email"
+                value={formData.qaManagerEmail || 'reginevertex1201@gmail.com'}
+                onChange={(e) => setFormData(prev => ({ ...prev, qaManagerEmail: e.target.value }))}
+                placeholder="reginevertex1201@gmail.com"
+                className="w-full bg-slate-950 border border-cyan-800/80 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 font-mono"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
